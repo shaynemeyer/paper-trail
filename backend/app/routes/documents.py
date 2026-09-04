@@ -6,7 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from app.chunking import chunk_text
 from app.config import MARKDOWN_DIR, RAW_PDF_DIR
-from app.models.document import Document, DocumentCreate, DocumentUpdate, DocumentRead
+from app.models.document import (
+    DESCRIPTION_MAX_WORDS,
+    Document,
+    DocumentCreate,
+    DocumentUpdate,
+    DocumentRead,
+)
 from app.models.document_chunk import DocumentChunk
 from app.database import get_session
 from app.auth.permissions import require_user, require_admin
@@ -80,7 +86,7 @@ async def create_document(
 async def upload_document(
     file: UploadFile = File(...),
     name: str = Form(...),
-    description: str = Form(..., max_length=500),
+    description: str = Form(...),
     document_source: str | None = Form(None),
     tags: str = Form(""),
     session: AsyncSession = Depends(get_session),
@@ -98,6 +104,16 @@ async def upload_document(
     """
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+
+    description_word_count = len(description.split())
+    if description_word_count > DESCRIPTION_MAX_WORDS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Description must be {DESCRIPTION_MAX_WORDS} words or fewer "
+                f"(got {description_word_count})"
+            ),
+        )
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()]
     db_document = Document(
