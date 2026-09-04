@@ -1,6 +1,6 @@
 # User Dashboard
 
-**Status:** Not Started
+**Status:** Complete — merged 2026-09-04 (2887d58)
 **Depends on:** none
 
 ## Context
