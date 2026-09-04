@@ -1,6 +1,6 @@
 # Document Upload UI
 
-**Status:** Not Started
+**Status:** Complete — merged 2026-09-04 (92c7aa0)
 
 **Depends on:** 01-document-upload-api-client
 
