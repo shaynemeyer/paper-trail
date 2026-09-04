@@ -1,6 +1,6 @@
 ---
 name: feature
-description: Manage the current feature workflow — report status, load a spec, start implementation, review, test, explain, or complete a feature. Use when the user asks for feature status or progress, or to load/start/review/test/explain/complete a feature or fix, or refers to the feature lifecycle tracked in context/current-feature.md.
+description: Manage the current feature workflow — report status, break a plan into specs, load a spec, start implementation, review, test, explain, or complete a feature. Use when the user asks for feature status or progress, to break a plan doc into features, or to load/start/review/test/explain/complete a feature or fix, or refers to the feature lifecycle tracked in context/current-feature.md.
 ---
 
 # Feature Workflow
@@ -49,6 +49,7 @@ The user names one action. Determine which from their request.
 | Action     | Description                                               |
 | ---------- | --------------------------------------------------------- |
 | `status`   | Report where things stand — read-only, changes nothing    |
+| `plan`     | Break a plan file or text into multiple feature specs     |
 | `load`     | Load a feature spec or inline description                 |
 | `start`    | Begin implementation, create branch                       |
 | `review`   | Check goals met, code quality                             |

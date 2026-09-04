@@ -1,6 +1,6 @@
 ---
 name: feature
-description: "Manage a spec-driven feature or fix from setup through status, loading, implementation, review, testing, explanation, and completion. Use when asked to manage tracked feature work or whenever context/current-feature.md tracks the active work."
+description: "Manage a spec-driven feature or fix from setup through planning, status, loading, implementation, review, testing, explanation, and completion. Use when asked to manage tracked feature work, break a plan document into features, or whenever context/current-feature.md tracks the active work."
 ---
 
 # Feature Workflow
@@ -12,6 +12,7 @@ Infer the requested action from the user's request. For an interactive `/feature
 | Action | Supporting instructions | Behavior |
 | --- | --- | --- |
 | `setup` | `actions/setup.md` | Initialize project context and Kiro steering. |
+| `plan` | `actions/plan.md` | Split a plan document or text into multiple feature specs. |
 | `status` | `actions/status.md` | Report feature, spec, git, and gate state without changes. |
 | `load` | `actions/load.md` | Load a spec or inline description. |
 | `start` | `actions/start.md` | Create a branch and implement the active work. |
@@ -21,7 +22,7 @@ Infer the requested action from the user's request. For an interactive `/feature
 | `complete` | `actions/complete.md` | Validate, then perform separately approved git and state transitions. |
 | `help` | This table | Show available actions and examples. |
 
-For one of the eight actions with a supporting file, read that relative file before proceeding. There are no separate action files for `help` or spec creation.
+For one of the nine actions with a supporting file, read that relative file before proceeding. There are no separate action files for `help` or spec creation.
 
 If the requested action is not one of the actions above, treat the requested skill input as `<name> [description]` for spec creation:
 

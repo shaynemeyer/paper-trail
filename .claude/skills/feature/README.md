@@ -50,6 +50,19 @@ Scaffolds a spec file at `context/features/<name>.md`. If a description is provi
 
 The spec is **not** activated — run `/feature load <name>` when you're ready to start work.
 
+### Break a plan into specs _(optional)_
+
+```
+/feature plan <path-to-plan-file>
+/feature plan <plan text>
+```
+
+For a design/plan doc that covers more ground than one feature, splits it into
+multiple numbered specs under `context/features/`, ordered by dependency (e.g. a
+plan touching both a backend route and its frontend client becomes two specs, the
+client one depending on the route one). None of the created specs are activated —
+run `/feature load <name>` on whichever one you want to start with.
+
 ### 2. Load a spec _(required)_
 
 ```
@@ -118,6 +131,7 @@ Stages and commits all changes, resets `current-feature.md` for the next feature
 |---------|-------------|
 | `/feature setup` | **Run first.** Initialize context files in the project |
 | `/feature status` | _(optional)_ Report active feature, progress, git and gate state |
+| `/feature plan <path\|text>` | _(optional)_ Break a plan into multiple numbered specs |
 | `/feature <name> [description]` | _(optional)_ Create a spec (optionally pre-populated from description) |
 | `/feature load <name> [description]` | **Required.** Load a spec, creating it from description if it doesn't exist. Omit `<name>` to derive one from the description. |
 | `/feature start [branch]` | **Required.** Branch and implement the active feature |
