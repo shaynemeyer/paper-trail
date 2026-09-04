@@ -39,6 +39,7 @@ import {
   type Document,
   type DocumentInput,
   type DocumentStatus,
+  type UploadDocumentInput,
   documentsApi,
 } from '@/lib/api'
 
@@ -60,6 +61,13 @@ const emptyForm: DocumentInput = {
   status: 'draft',
 }
 
+const emptyUploadForm = {
+  name: '',
+  description: '',
+  document_source: '',
+  tagsInput: '',
+}
+
 function AdminDocuments() {
   const queryClient = useQueryClient()
   const { data: documents = [], isLoading, error } = useQuery({
@@ -70,6 +78,10 @@ function AdminDocuments() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Document | null>(null)
   const [form, setForm] = useState<DocumentInput>(emptyForm)
+
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadForm, setUploadForm] = useState(emptyUploadForm)
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['documents'] })
 
@@ -112,6 +124,18 @@ function AdminDocuments() {
     onError: (err: Error) => toast.error(err.message),
   })
 
+  const uploadMutation = useMutation({
+    mutationFn: documentsApi.upload,
+    onSuccess: () => {
+      invalidate()
+      toast.success('Document uploaded')
+      setUploadDialogOpen(false)
+      setUploadForm(emptyUploadForm)
+      setUploadFile(null)
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
   function openCreate() {
     setEditing(null)
     setForm(emptyForm)
@@ -137,6 +161,35 @@ function AdminDocuments() {
     } else {
       createMutation.mutate(form)
     }
+  }
+
+  function openUpload() {
+    setUploadForm(emptyUploadForm)
+    setUploadFile(null)
+    setUploadDialogOpen(true)
+  }
+
+  function handleUploadSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!uploadFile) {
+      toast.error('Select a PDF file')
+      return
+    }
+    if (uploadFile.type !== 'application/pdf') {
+      toast.error('Only PDF files are supported')
+      return
+    }
+    const data: UploadDocumentInput = {
+      file: uploadFile,
+      name: uploadForm.name,
+      description: uploadForm.description,
+      document_source: uploadForm.document_source || undefined,
+      tags: uploadForm.tagsInput
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    }
+    uploadMutation.mutate(data)
   }
 
   const columns: ColumnDef<Document>[] = [
@@ -211,81 +264,157 @@ function AdminDocuments() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Documents</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger render={<Button onClick={openCreate}>New Document</Button>} />
-          <DialogContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <DialogHeader>
-                <DialogTitle>{editing ? 'Edit Document' : 'New Document'}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  required
-                  maxLength={500}
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        <div className="flex gap-2">
+          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+            <DialogTrigger
+              render={
+                <Button variant="outline" onClick={openUpload}>
+                  Upload PDF
+                </Button>
+              }
+            />
+            <DialogContent>
+              <form onSubmit={handleUploadSubmit} className="space-y-4">
+                <DialogHeader>
+                  <DialogTitle>Upload PDF</DialogTitle>
+                </DialogHeader>
                 <div className="space-y-2">
-                  <Label htmlFor="doctype">Doctype</Label>
+                  <Label htmlFor="upload-file">PDF file</Label>
                   <Input
-                    id="doctype"
-                    value={form.doctype}
-                    onChange={(e) => setForm({ ...form, doctype: e.target.value })}
+                    id="upload-file"
+                    type="file"
+                    accept="application/pdf"
+                    required
+                    onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={form.status}
-                    onValueChange={(value) =>
-                      setForm({ ...form, status: value as DocumentStatus })
+                  <Label htmlFor="upload-name">Name</Label>
+                  <Input
+                    id="upload-name"
+                    required
+                    value={uploadForm.name}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, name: e.target.value })
                     }
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="draft">draft</SelectItem>
-                      <SelectItem value="pending">pending</SelectItem>
-                      <SelectItem value="approved">approved</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="document_source">Source (optional)</Label>
-                <Input
-                  id="document_source"
-                  value={form.document_source ?? ''}
-                  onChange={(e) =>
-                    setForm({ ...form, document_source: e.target.value })
-                  }
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  type="submit"
-                  disabled={createMutation.isPending || updateMutation.isPending}
-                >
-                  {editing ? 'Save' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+                <div className="space-y-2">
+                  <Label htmlFor="upload-description">Description</Label>
+                  <Textarea
+                    id="upload-description"
+                    required
+                    maxLength={500}
+                    value={uploadForm.description}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, description: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="upload-source">Source (optional)</Label>
+                  <Input
+                    id="upload-source"
+                    value={uploadForm.document_source}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, document_source: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="upload-tags">Tags (comma-separated, optional)</Label>
+                  <Input
+                    id="upload-tags"
+                    value={uploadForm.tagsInput}
+                    onChange={(e) =>
+                      setUploadForm({ ...uploadForm, tagsInput: e.target.value })
+                    }
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="submit" disabled={uploadMutation.isPending}>
+                    {uploadMutation.isPending ? 'Uploading…' : 'Upload'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger render={<Button onClick={openCreate}>New Document</Button>} />
+            <DialogContent>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <DialogHeader>
+                  <DialogTitle>{editing ? 'Edit Document' : 'New Document'}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    required
+                    maxLength={500}
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="doctype">Doctype</Label>
+                    <Input
+                      id="doctype"
+                      value={form.doctype}
+                      onChange={(e) => setForm({ ...form, doctype: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={form.status}
+                      onValueChange={(value) =>
+                        setForm({ ...form, status: value as DocumentStatus })
+                      }
+                    >
+                      <SelectTrigger id="status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">draft</SelectItem>
+                        <SelectItem value="pending">pending</SelectItem>
+                        <SelectItem value="approved">approved</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="document_source">Source (optional)</Label>
+                  <Input
+                    id="document_source"
+                    value={form.document_source ?? ''}
+                    onChange={(e) =>
+                      setForm({ ...form, document_source: e.target.value })
+                    }
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="submit"
+                    disabled={createMutation.isPending || updateMutation.isPending}
+                  >
+                    {editing ? 'Save' : 'Create'}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
       {isLoading ? (
         <p className="text-muted-foreground">Loading…</p>
