@@ -1,4 +1,3 @@
-import { useNavigate } from '@tanstack/react-router'
 import { ChevronsUpDown, LogOut, Monitor, Moon, Sun } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -31,14 +30,13 @@ function initials(name: string) {
 export function NavUser() {
   const { isMobile } = useSidebar()
   const { setTheme } = useTheme()
-  const navigate = useNavigate()
   const user = getCurrentUser()
   const name = user?.sub ?? 'Guest'
   const role = user?.role ?? 'signed out'
 
   function handleLogout() {
     clearToken()
-    navigate({ to: '/' })
+    window.location.href = '/'
   }
 
   return (
