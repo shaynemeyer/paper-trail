@@ -1,6 +1,6 @@
 # Document Chat
 
-**Status:** Not Started
+**Status:** Complete — merged 2026-09-04 (7bd3a8e)
 **Depends on:** 03-user-dashboard
 
 ## Context
