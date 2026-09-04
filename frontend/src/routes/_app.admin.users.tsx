@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import { z } from 'zod'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,13 +19,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -41,6 +42,15 @@ export const Route = createFileRoute('/_app/admin/users')({
 })
 
 const emptyForm: UserInput = { email: '', name: '', role: 'user' }
+
+// Mirrors backend/app/models/user.py's UserCreate/UserUpdate: the backend
+// stores email/name as unbounded plain strings with no format check, but a
+// well-formed email is still worth enforcing client-side for UX.
+const userSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Enter a valid email'),
+  name: z.string().min(1, 'Name is required'),
+  role: z.enum(['user', 'admin']),
+})
 
 function AdminUsers() {
   const queryClient = useQueryClient()
@@ -99,10 +109,15 @@ function AdminUsers() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    const result = userSchema.safeParse(form)
+    if (!result.success) {
+      toast.error(result.error.issues[0].message)
+      return
+    }
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data: form })
+      updateMutation.mutate({ id: editing.id, data: result.data })
     } else {
-      createMutation.mutate(form)
+      createMutation.mutate(result.data)
     }
   }
 
@@ -170,60 +185,62 @@ function AdminUsers() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Users</h1>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger render={<Button onClick={openCreate}>New User</Button>} />
-          <DialogContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <DialogHeader>
-                <DialogTitle>{editing ? 'Edit User' : 'New User'}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                />
+        <Drawer open={dialogOpen} onOpenChange={setDialogOpen} swipeDirection="right">
+          <DrawerTrigger render={<Button onClick={openCreate}>New User</Button>} />
+          <DrawerContent>
+            <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+              <DrawerHeader>
+                <DrawerTitle>{editing ? 'Edit User' : 'New User'}</DrawerTitle>
+              </DrawerHeader>
+              <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name</Label>
+                  <Input
+                    id="name"
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="role">Role</Label>
+                  <Select
+                    value={form.role}
+                    onValueChange={(value) =>
+                      setForm({ ...form, role: value as UserRole })
+                    }
+                  >
+                    <SelectTrigger id="role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">user</SelectItem>
+                      <SelectItem value="admin">admin</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
-                <Select
-                  value={form.role}
-                  onValueChange={(value) =>
-                    setForm({ ...form, role: value as UserRole })
-                  }
-                >
-                  <SelectTrigger id="role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="user">user</SelectItem>
-                    <SelectItem value="admin">admin</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <DialogFooter>
+              <DrawerFooter>
                 <Button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}
                 >
                   {editing ? 'Save' : 'Create'}
                 </Button>
-              </DialogFooter>
+              </DrawerFooter>
             </form>
-          </DialogContent>
-        </Dialog>
+          </DrawerContent>
+        </Drawer>
       </div>
       {isLoading ? (
         <p className="text-muted-foreground">Loading…</p>

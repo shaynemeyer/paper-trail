@@ -42,6 +42,26 @@ export class ApiError extends Error {
   }
 }
 
+// FastAPI sends `detail` as a plain string for HTTPException, but as an array
+// of Pydantic validation-error objects (`{loc, msg, type}`) for a 422 -- fall
+// back to the raw JSON if the shape is ever something else.
+function extractErrorMessage(body: unknown, fallback: string): string {
+  if (body && typeof body === "object" && "detail" in body) {
+    const detail = (body as { detail: unknown }).detail
+    if (typeof detail === "string") return detail
+    if (Array.isArray(detail)) {
+      return detail
+        .map((err) =>
+          err && typeof err === "object" && "msg" in err
+            ? String((err as { msg: unknown }).msg)
+            : JSON.stringify(err)
+        )
+        .join("; ")
+    }
+  }
+  return fallback
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const response = await fetch(`${API_URL}${path}`, {
@@ -55,7 +75,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new ApiError(response.status, body?.detail ?? response.statusText)
+    throw new ApiError(response.status, extractErrorMessage(body, response.statusText))
   }
 
   if (response.status === 204) return undefined as T
@@ -71,9 +91,24 @@ async function requestForm<T>(path: string, formData: FormData): Promise<T> {
   })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new ApiError(response.status, body?.detail ?? response.statusText)
+    throw new ApiError(response.status, extractErrorMessage(body, response.statusText))
   }
   return response.json()
+}
+
+// For file-serving routes (raw/markdown): these require the same bearer
+// token as everything else, so a plain <a href> would 401 -- fetch as a blob
+// and let the caller open/download it via an object URL instead.
+async function requestBlob(path: string): Promise<Blob> {
+  const token = getToken()
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null)
+    throw new ApiError(response.status, extractErrorMessage(body, response.statusText))
+  }
+  return response.blob()
 }
 
 export type DocumentStatus = "draft" | "pending" | "approved"
@@ -85,6 +120,8 @@ export interface Document {
   doctype: string
   document_source: string | null
   status: DocumentStatus
+  raw_url: string | null
+  markdown_url: string | null
   created_at: string
   updated_at: string
 }
@@ -115,6 +152,9 @@ export const documentsApi = {
   embed: (id: number) => request<Document>(`/documents/${id}/embed`, { method: "POST" }),
   search: (q: string) =>
     request<Document[]>(`/documents/search?q=${encodeURIComponent(q)}`),
+  getRaw: (id: number) => requestBlob(`/documents/${id}/raw`),
+  getMarkdown: (id: number) =>
+    requestBlob(`/documents/${id}/markdown`).then((blob) => blob.text()),
   upload: (data: UploadDocumentInput) => {
     const formData = new FormData()
     formData.append("file", data.file)

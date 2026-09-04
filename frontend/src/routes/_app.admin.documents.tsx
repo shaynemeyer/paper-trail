@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useState } from 'react'
+import Markdown from 'react-markdown'
 import { toast } from 'sonner'
+import { z } from 'zod'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,13 +20,13 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { DataTable } from '@/components/data-table'
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+  Drawer,
+  DrawerContent,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from '@/components/ui/drawer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -42,6 +44,7 @@ import {
   type UploadDocumentInput,
   documentsApi,
 } from '@/lib/api'
+import { countWords, DESCRIPTION_MAX_WORDS } from '@/lib/validation'
 
 export const Route = createFileRoute('/_app/admin/documents')({
   component: AdminDocuments,
@@ -68,6 +71,31 @@ const emptyUploadForm = {
   tagsInput: '',
 }
 
+// Mirrors backend/app/models/document.py's DocumentCreate/DocumentUpdate: name
+// and doctype are unbounded strings, description is capped by word count (not
+// character count -- see app/models/document.py's DESCRIPTION_MAX_WORDS).
+const descriptionSchema = z
+  .string()
+  .min(1, 'Description is required')
+  .refine((value) => countWords(value) <= DESCRIPTION_MAX_WORDS, {
+    message: `Description must be ${DESCRIPTION_MAX_WORDS} words or fewer`,
+  })
+
+const documentSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: descriptionSchema,
+  doctype: z.string().min(1, 'Doctype is required'),
+  document_source: z.string().optional(),
+  status: z.enum(['draft', 'pending', 'approved']),
+})
+
+const uploadFormSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  description: descriptionSchema,
+  document_source: z.string().optional(),
+  tagsInput: z.string().optional(),
+})
+
 function AdminDocuments() {
   const queryClient = useQueryClient()
   const { data: documents = [], isLoading, error } = useQuery({
@@ -83,17 +111,11 @@ function AdminDocuments() {
   const [uploadForm, setUploadForm] = useState(emptyUploadForm)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['documents'] })
+  const [markdownDrawerOpen, setMarkdownDrawerOpen] = useState(false)
+  const [markdownDocName, setMarkdownDocName] = useState('')
+  const [markdownContent, setMarkdownContent] = useState('')
 
-  const createMutation = useMutation({
-    mutationFn: documentsApi.create,
-    onSuccess: () => {
-      invalidate()
-      toast.success('Document created')
-      setDialogOpen(false)
-    },
-    onError: (err: Error) => toast.error(err.message),
-  })
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['documents'] })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: DocumentInput }) =>
@@ -136,11 +158,23 @@ function AdminDocuments() {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  function openCreate() {
-    setEditing(null)
-    setForm(emptyForm)
-    setDialogOpen(true)
-  }
+  const viewRawMutation = useMutation({
+    mutationFn: (document: Document) => documentsApi.getRaw(document.id),
+    onSuccess: (blob) => {
+      window.open(URL.createObjectURL(blob), '_blank')
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
+
+  const viewMarkdownMutation = useMutation({
+    mutationFn: (document: Document) => documentsApi.getMarkdown(document.id),
+    onSuccess: (text, document) => {
+      setMarkdownDocName(document.name)
+      setMarkdownContent(text)
+      setMarkdownDrawerOpen(true)
+    },
+    onError: (err: Error) => toast.error(err.message),
+  })
 
   function openEdit(document: Document) {
     setEditing(document)
@@ -156,11 +190,13 @@ function AdminDocuments() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, data: form })
-    } else {
-      createMutation.mutate(form)
+    if (!editing) return
+    const result = documentSchema.safeParse(form)
+    if (!result.success) {
+      toast.error(result.error.issues[0].message)
+      return
     }
+    updateMutation.mutate({ id: editing.id, data: result.data })
   }
 
   function openUpload() {
@@ -179,12 +215,17 @@ function AdminDocuments() {
       toast.error('Only PDF files are supported')
       return
     }
+    const result = uploadFormSchema.safeParse(uploadForm)
+    if (!result.success) {
+      toast.error(result.error.issues[0].message)
+      return
+    }
     const data: UploadDocumentInput = {
       file: uploadFile,
-      name: uploadForm.name,
-      description: uploadForm.description,
-      document_source: uploadForm.document_source || undefined,
-      tags: uploadForm.tagsInput
+      name: result.data.name,
+      description: result.data.description,
+      document_source: result.data.document_source || undefined,
+      tags: (result.data.tagsInput ?? '')
         .split(',')
         .map((tag) => tag.trim())
         .filter(Boolean),
@@ -224,6 +265,22 @@ function AdminDocuments() {
             onClick={() => embedMutation.mutate(row.original.id)}
           >
             Embed
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!row.original.raw_url || viewRawMutation.isPending}
+            onClick={() => viewRawMutation.mutate(row.original)}
+          >
+            View Raw
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!row.original.markdown_url || viewMarkdownMutation.isPending}
+            onClick={() => viewMarkdownMutation.mutate(row.original)}
+          >
+            View Markdown
           </Button>
           <AlertDialog>
             <AlertDialogTrigger
@@ -265,155 +322,169 @@ function AdminDocuments() {
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Documents</h1>
         <div className="flex gap-2">
-          <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-            <DialogTrigger
+          <Drawer
+            open={uploadDialogOpen}
+            onOpenChange={setUploadDialogOpen}
+            swipeDirection="right"
+          >
+            <DrawerTrigger
               render={
                 <Button variant="outline" onClick={openUpload}>
                   Upload PDF
                 </Button>
               }
             />
-            <DialogContent>
-              <form onSubmit={handleUploadSubmit} className="space-y-4">
-                <DialogHeader>
-                  <DialogTitle>Upload PDF</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <Label htmlFor="upload-file">PDF file</Label>
-                  <Input
-                    id="upload-file"
-                    type="file"
-                    accept="application/pdf"
-                    required
-                    onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="upload-name">Name</Label>
-                  <Input
-                    id="upload-name"
-                    required
-                    value={uploadForm.name}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="upload-description">Description</Label>
-                  <Textarea
-                    id="upload-description"
-                    required
-                    maxLength={500}
-                    value={uploadForm.description}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, description: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="upload-source">Source (optional)</Label>
-                  <Input
-                    id="upload-source"
-                    value={uploadForm.document_source}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, document_source: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="upload-tags">Tags (comma-separated, optional)</Label>
-                  <Input
-                    id="upload-tags"
-                    value={uploadForm.tagsInput}
-                    onChange={(e) =>
-                      setUploadForm({ ...uploadForm, tagsInput: e.target.value })
-                    }
-                  />
-                </div>
-                <DialogFooter>
-                  <Button type="submit" disabled={uploadMutation.isPending}>
-                    {uploadMutation.isPending ? 'Uploading…' : 'Upload'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger render={<Button onClick={openCreate}>New Document</Button>} />
-            <DialogContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <DialogHeader>
-                  <DialogTitle>{editing ? 'Edit Document' : 'New Document'}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    required
-                    maxLength={500}
-                    value={form.description}
-                    onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
+            <DrawerContent>
+              <form
+                onSubmit={handleUploadSubmit}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <DrawerHeader>
+                  <DrawerTitle>Upload PDF</DrawerTitle>
+                </DrawerHeader>
+                <div className="flex-1 space-y-4 overflow-y-auto p-4">
                   <div className="space-y-2">
-                    <Label htmlFor="doctype">Doctype</Label>
+                    <Label htmlFor="upload-file">PDF file</Label>
                     <Input
-                      id="doctype"
-                      value={form.doctype}
-                      onChange={(e) => setForm({ ...form, doctype: e.target.value })}
+                      id="upload-file"
+                      type="file"
+                      accept="application/pdf"
+                      required
+                      onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="status">Status</Label>
-                    <Select
-                      value={form.status}
-                      onValueChange={(value) =>
-                        setForm({ ...form, status: value as DocumentStatus })
+                    <Label htmlFor="upload-name">Name</Label>
+                    <Input
+                      id="upload-name"
+                      required
+                      value={uploadForm.name}
+                      onChange={(e) =>
+                        setUploadForm({ ...uploadForm, name: e.target.value })
                       }
-                    >
-                      <SelectTrigger id="status">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="draft">draft</SelectItem>
-                        <SelectItem value="pending">pending</SelectItem>
-                        <SelectItem value="approved">approved</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="upload-description">Description</Label>
+                    <Textarea
+                      id="upload-description"
+                      required
+                      value={uploadForm.description}
+                      onChange={(e) =>
+                        setUploadForm({ ...uploadForm, description: e.target.value })
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {countWords(uploadForm.description)}/{DESCRIPTION_MAX_WORDS} words
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="upload-source">Source (optional)</Label>
+                    <Input
+                      id="upload-source"
+                      value={uploadForm.document_source}
+                      onChange={(e) =>
+                        setUploadForm({
+                          ...uploadForm,
+                          document_source: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="upload-tags">Tags (comma-separated, optional)</Label>
+                    <Input
+                      id="upload-tags"
+                      value={uploadForm.tagsInput}
+                      onChange={(e) =>
+                        setUploadForm({ ...uploadForm, tagsInput: e.target.value })
+                      }
+                    />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="document_source">Source (optional)</Label>
-                  <Input
-                    id="document_source"
-                    value={form.document_source ?? ''}
-                    onChange={(e) =>
-                      setForm({ ...form, document_source: e.target.value })
-                    }
-                  />
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={createMutation.isPending || updateMutation.isPending}
-                  >
-                    {editing ? 'Save' : 'Create'}
+                <DrawerFooter>
+                  <Button type="submit" disabled={uploadMutation.isPending}>
+                    {uploadMutation.isPending ? 'Uploading…' : 'Upload'}
                   </Button>
-                </DialogFooter>
+                </DrawerFooter>
               </form>
-            </DialogContent>
-          </Dialog>
+            </DrawerContent>
+          </Drawer>
+          <Drawer open={dialogOpen} onOpenChange={setDialogOpen} swipeDirection="right">
+            <DrawerContent>
+              <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+                <DrawerHeader>
+                  <DrawerTitle>Edit Document</DrawerTitle>
+                </DrawerHeader>
+                <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input
+                      id="name"
+                      required
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      required
+                      value={form.description}
+                      onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {countWords(form.description)}/{DESCRIPTION_MAX_WORDS} words
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="doctype">Doctype</Label>
+                      <Input
+                        id="doctype"
+                        value={form.doctype}
+                        onChange={(e) => setForm({ ...form, doctype: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="status">Status</Label>
+                      <Select
+                        value={form.status}
+                        onValueChange={(value) =>
+                          setForm({ ...form, status: value as DocumentStatus })
+                        }
+                      >
+                        <SelectTrigger id="status">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">draft</SelectItem>
+                          <SelectItem value="pending">pending</SelectItem>
+                          <SelectItem value="approved">approved</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="document_source">Source (optional)</Label>
+                    <Input
+                      id="document_source"
+                      value={form.document_source ?? ''}
+                      onChange={(e) =>
+                        setForm({ ...form, document_source: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+                <DrawerFooter>
+                  <Button type="submit" disabled={updateMutation.isPending}>
+                    Save
+                  </Button>
+                </DrawerFooter>
+              </form>
+            </DrawerContent>
+          </Drawer>
         </div>
       </div>
       {isLoading ? (
@@ -421,6 +492,22 @@ function AdminDocuments() {
       ) : (
         <DataTable columns={columns} data={documents} />
       )}
+      <Drawer
+        open={markdownDrawerOpen}
+        onOpenChange={setMarkdownDrawerOpen}
+        swipeDirection="right"
+      >
+        <DrawerContent>
+          <DrawerHeader>
+            <DrawerTitle>{markdownDocName}</DrawerTitle>
+          </DrawerHeader>
+          <div
+            className="flex-1 overflow-y-auto p-4 text-sm [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_li]:ml-4 [&_ol]:list-decimal [&_p]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_ul]:list-disc"
+          >
+            <Markdown>{markdownContent}</Markdown>
+          </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }

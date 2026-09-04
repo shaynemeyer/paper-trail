@@ -61,11 +61,20 @@ than forced into one shared set of rules.
   with the server's `detail` message on non-2xx) plus one `*Api` object per
   resource (`documentsApi`, `usersApi`). Add new endpoints there rather than
   calling `fetch` directly from a route component.
-- **Forms**: currently plain `useState` + controlled inputs, submitted via a
-  manual `onSubmit` handler that calls `mutation.mutate(...)` — there is no
-  Zod/`react-hook-form` usage yet despite being common in this stack. Follow
-  the existing plain-state pattern rather than introducing a form library
-  unless asked to.
+- **Forms**: plain `useState` + controlled inputs — there is no
+  `react-hook-form` usage, don't introduce it unless asked to. Every form
+  submit handler validates with a Zod schema before calling
+  `mutation.mutate(...)`: `const result = schema.safeParse(form); if
+  (!result.success) { toast.error(result.error.issues[0].message); return }`,
+  then mutate with `result.data` (not the raw form state) so the mutation gets
+  Zod-narrowed types. Schemas live next to the route component that uses them
+  (not centralized), named `<thing>Schema` (e.g. `documentSchema`,
+  `userSchema`), and should mirror the backend model's actual constraints in
+  `backend/app/models/` (required vs optional, enums, any custom validators
+  like word/length limits) rather than inventing stricter rules the API
+  doesn't enforce — see `_app.admin.documents.tsx`'s `documentSchema` /
+  `uploadFormSchema` and `_app.admin.users.tsx`'s `userSchema` for the
+  reference pattern.
 - **Styling**: Tailwind CSS v4 — configuration lives in `@theme` blocks in
   `src/index.css`, there is no `tailwind.config.ts`/`.js`. No inline `style={}`
   props.
