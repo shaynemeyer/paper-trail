@@ -4,3 +4,9 @@
 
 .env
 
+
+# Uploaded/processed documents (local dev storage)
+documents/raw/pdf/*
+documents/processed/md/*
+!documents/raw/pdf/.gitkeep
+!documents/processed/md/.gitkeep

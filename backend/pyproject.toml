@@ -1,0 +1,38 @@
+[project]
+name = "paper-trail-backend"
+version = "0.1.0"
+description = "Paper Trail API - async SQLAlchemy/SQLModel, JWT auth (RS256), structured logging"
+readme = "readme.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.126.0",
+    "uvicorn[standard]==0.38.0",
+    "gunicorn==23.0.0",
+    "sqlmodel==0.0.27",
+    "sqlalchemy==2.0.45",
+    "asyncpg==0.31.0",
+    "pyjwt==2.10.1",
+    "cryptography==46.0.3",
+    "python-dotenv==1.2.1",
+    "structlog==25.5.0",
+    "greenlet>=3.5.5",
+    "pgvector>=0.5.0",
+    "langchain-ollama>=1.1.0",
+    "pymupdf4llm>=1.28.2",
+    "python-multipart>=0.0.32",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "httpx>=0.24.0",
+    "ruff==0.14.10",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"
