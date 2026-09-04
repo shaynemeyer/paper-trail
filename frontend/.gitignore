@@ -16,6 +16,10 @@ dist-ssr
 src/routeTree.gen.ts
 .tanstack/
 
+# Playwright
+playwright-report/
+test-results/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

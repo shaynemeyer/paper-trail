@@ -166,6 +166,19 @@ export const documentsApi = {
   },
 }
 
+export interface ChatResponse {
+  answer: string
+  chunk_ids: number[]
+}
+
+export const chatApi = {
+  ask: (documentId: number, message: string) =>
+    request<ChatResponse>(`/documents/${documentId}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+}
+
 export type UserRole = "user" | "admin"
 
 export interface User {
