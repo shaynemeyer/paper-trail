@@ -1,29 +1,26 @@
-# Current Feature
-
-<!-- Feature Name -->
+# Current Feature: Document Chat
 
 ## Status
 
-<!-- Not Started|In Progress|Complete -->
-
-Not Started
+In Progress
 
 ## Goals
 
-<!-- Goals & requirements -->
+- Add `chatApi` and `ChatResponse` to `frontend/src/lib/api.ts`, following the existing API object pattern and posting messages to `/documents/{documentId}/chat`.
+- Add `frontend/src/components/documents/document-chat.tsx` with a message list and input for the selected document.
+- Submit questions with `useMutation`, append successful answers to local message state, and show `toast.error(err.message)` on errors.
+- Show the chat panel from the user dashboard when a document is selected, using a drawer or side-panel pattern consistent with existing admin pages.
+- Keep this frontend-only; make no backend changes.
 
 ## Notes
 
-<!-- Any extra notes -->
+- Spec: `context/features/04-document-chat.md`.
+- Depends on completed feature `03-user-dashboard`.
+- The backend chat endpoint, authentication, and retrieval flow already exist.
+- Chat history is in-memory only and starts fresh when a document is reselected.
+- Out of scope: document search changes, persisted chat history, and changes to admin document or user pages.
+- Manual validation should confirm successful answers render and API failures, including documents without embedded chunks, show an error toast.
 
 ## History
 
-<!-- Keep this updated. Earliest to latest -->
-
-- **User Dashboard** (`context/features/03-user-dashboard.md`) — merged 2026-09-04
-  (2887d58). Replaced the `/_app/` placeholder in `frontend/src/routes/_app.index.tsx`
-  with a document list fetched via `documentsApi.list()` and rendered through the
-  existing `DataTable` component (name/doctype/status badge/updated columns, matching
-  `_app.admin.documents.tsx`'s pattern). Added a per-row "Chat"/"Selected" button that
-  sets local `activeDocument` state — the hook `04-document-chat.md` builds on next.
-  No backend changes.
+- **Document Chat** (`context/features/04-document-chat.md`) — loaded 2026-09-04.

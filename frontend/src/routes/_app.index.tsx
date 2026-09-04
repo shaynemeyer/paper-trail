@@ -2,9 +2,17 @@ import { useQuery } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useState } from 'react'
+import { DataTable } from '@/components/data-table'
+import { DocumentChat } from '@/components/documents/document-chat'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { DataTable } from '@/components/data-table'
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/components/ui/drawer'
 import { type Document, type DocumentStatus, documentsApi } from '@/lib/api'
 
 export const Route = createFileRoute('/_app/')({
@@ -71,6 +79,28 @@ function Index() {
       ) : (
         <DataTable columns={columns} data={documents} />
       )}
+
+      <Drawer
+        open={activeDocument !== null}
+        onOpenChange={(open) => {
+          if (!open) setActiveDocument(null)
+        }}
+        swipeDirection="right"
+      >
+        <DrawerContent>
+          {activeDocument && (
+            <>
+              <DrawerHeader>
+                <DrawerTitle>Chat with {activeDocument.name}</DrawerTitle>
+                <DrawerDescription>
+                  Answers are grounded in this document's embedded content.
+                </DrawerDescription>
+              </DrawerHeader>
+              <DocumentChat key={activeDocument.id} document={activeDocument} />
+            </>
+          )}
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }
